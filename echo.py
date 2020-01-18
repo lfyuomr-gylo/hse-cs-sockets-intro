@@ -2,18 +2,21 @@
 
 import socket
 import threading
-from itertools import takewhile
+from pathlib import Path
+from typing import Union
+
+CONTENT_DIR = Path(__file__).absolute().parent / 'static_data'
 
 
-def http_response_data(status: int, status_msg: str, headers: dict, content: str = None):
+def http_response_data(status: int, status_msg: str, headers: dict, content: Union[str, bytes] = None):
     response_line = f"HTTP/1.1 {status} {status_msg}"
+    if isinstance(content, str):
+        content = bytes(content, 'utf-8')
     if content:
-        headers["Content-Length"] = len(bytes(content, 'utf-8'))
+        headers["Content-Length"] = len(content)
     header_lines = [f"{header_name}: {header_values}" for header_name, header_values in headers.items()]
-    lines = [response_line, *header_lines, '']
-    if content:
-        lines.append(content)
-    return bytes('\r\n'.join(lines), 'utf-8')
+    lines = [response_line, *header_lines]
+    return bytes('\r\n'.join(lines), 'utf-8') + 2 * b'\r\n' + content
 
 
 def serve_http(connection: socket.socket):
@@ -46,10 +49,14 @@ def serve_http(connection: socket.socket):
         headers = {header[0]: header[1].lstrip() for header in headers}
         print("Headers:\n", headers)
 
-        if request_uri == '/ping':
-            connection.sendall(http_response_data(200, 'OK', {"Content-type": "text/plain"}, "pong\n"))
+        content_file = CONTENT_DIR / request_uri.lstrip('/')
+        if content_file.exists():
+            with content_file.open('r'):
+                response_payload = content_file.read_bytes()
+                response_data = http_response_data(200, "OK", {}, content=response_payload)
+                connection.sendall(response_data)
         else:
-            connection.sendall(http_response_data(404, "Not Found", {"Content-type": "text/plain"}, "Not found =(\n"))
+            connection.sendall(http_response_data(404, "Not Found", {}, content=f"File {content_file} does not exist"))
 
 
 def run_server(port, client_handler):
