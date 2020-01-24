@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import socket
 import threading
 from pathlib import Path
@@ -107,4 +108,6 @@ def run_server(port, client_handler):
 
 
 if __name__ == '__main__':
-    run_server(port=8082, client_handler=serve_http)
+    port = os.environ.get('SERVER_PORT', '8080')
+    port = int(port)
+    run_server(port=port, client_handler=serve_http)
